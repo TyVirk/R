@@ -1,0 +1,227 @@
+---
+title: "Incident Trending"
+author: "Tyler Virkler"
+date: "February 5, 2018"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Installing Packages Needed
+```{r, message=F, warning=F}
+if (packageVersion("devtools") < 1.6) {
+  install.packages("devtools")
+}
+library(tm)             # For vcorpus
+library(tidyverse)      # data manipulation & plotting
+library(stringr)        # text cleaning and regular expressions
+library(tidytext)       # provides additional text mining functions
+library(ggplot2)
+
+devtools::install_github("dgrtwo/drlib") #To Install GitHub R Package for Plotting
+
+```
+
+#Reading Incident Dataset
+```{r}
+Idata <- read.csv(file = "Incidents_FEB17toFEB18.csv", header=TRUE)
+
+```
+
+#Writing Incident Description Column to .txt file for analysis
+##By month
+```{r}
+write.table(Idata$Incident.Description,"IncidentDescription.txt",row.names=FALSE)
+
+#Separate Text Captured by Month
+Idata$month <- format(as.Date(Idata$Incident.Date, "%m/%d/%y"),"%m") #Create Month Column
+Idata$month<- as.numeric(Idata$month)
+Jan<-subset(Idata, month==01)
+Feb<-subset(Idata, month==02)
+Mar<-subset(Idata, month==03)
+Apr<-subset(Idata, month==04)
+May<-subset(Idata, month==05)
+Jun<-subset(Idata, month==06)
+Jul<-subset(Idata, month==07)
+Aug<-subset(Idata, month==08)
+Sep<-subset(Idata, month==09)
+Oct<-subset(Idata, month==10)
+Nov<-subset(Idata, month==11)
+Dec<-subset(Idata, month==12)
+#Write Text File to Combine all text for each month
+write.table(Jan$Incident.Description,"001_IncidentDescription.txt",row.names=FALSE)
+write.table(Feb$Incident.Description,"002_IncidentDescription.txt",row.names=FALSE)
+write.table(Mar$Incident.Description,"003_IncidentDescription.txt",row.names=FALSE)
+write.table(Apr$Incident.Description,"004_IncidentDescription.txt",row.names=FALSE)
+write.table(May$Incident.Description,"005_IncidentDescription.txt",row.names=FALSE)
+write.table(Jun$Incident.Description,"006_IncidentDescription.txt",row.names=FALSE)
+write.table(Jul$Incident.Description,"007_IncidentDescription.txt",row.names=FALSE)
+write.table(Aug$Incident.Description,"008_IncidentDescription.txt",row.names=FALSE)
+write.table(Sep$Incident.Description,"009_IncidentDescription.txt",row.names=FALSE)
+write.table(Oct$Incident.Description,"010_IncidentDescription.txt",row.names=FALSE)
+write.table(Nov$Incident.Description,"011_IncidentDescription.txt",row.names=FALSE)
+write.table(Dec$Incident.Description,"012_IncidentDescription.txt",row.names=FALSE)
+
+```
+
+#Loading File Location Folder Directory
+```{r}
+cname <- file.path("C:", "Users", "virklert", "Desktop", "IncidentTrending")
+dir(cname)
+
+```
+
+#Gathering info on files located in the specified folder above.
+```{r}
+docs <- VCorpus(DirSource(cname))
+summary(docs)
+```
+
+#Gathering Metadata on Txt file to analyze
+```{r}
+inspect(docs[1:12])
+```
+
+#Convert Txt files to character vector
+```{r}
+one <- unlist(docs[1], use.names=FALSE)
+two <- unlist(docs[2], use.names=FALSE)
+three <- unlist(docs[3], use.names=FALSE)
+
+titles <- c("1", "2", "3")
+
+books <- list(one, two, three)
+
+series <- tibble()
+
+for(i in seq_along(titles)) {
+        
+        clean <- tibble(chapter = seq_along(books[[i]]),
+                        text = books[[i]]) %>%
+             unnest_tokens(bigram, text, token = "ngrams", n = 2) %>%
+             mutate(book = titles[i]) %>%
+             select(book, everything())
+
+        series <- rbind(series, clean)
+}
+```
+
+
+# Set factor to keep books in order of publication
+## Creating Bi-grams, or two word phrases
+```{r}
+series$book <- factor(series$book, levels = rev(titles))
+
+series
+
+```
+
+#Frequency Analysis of bi-grams
+```{r}
+series %>%
+        count(bigram, sort = TRUE)
+```
+
+#Remove Stop Words, or unimportant words
+```{r}
+series %>%
+        separate(bigram, c("word1", "word2"), sep = " ") %>%
+        filter(!word1 %in% stop_words$word,
+               !word2 %in% stop_words$word) %>%
+        count(word1, word2, sort = TRUE)
+```
+
+#Top Bi-grams for each month, or book
+```{r}
+series %>%
+        separate(bigram, c("word1", "word2"), sep = " ") %>%
+        filter(!word1 %in% stop_words$word,
+               !word2 %in% stop_words$word) %>%
+        count(book, word1, word2, sort = TRUE) %>%
+        unite("bigram", c(word1, word2), sep = " ") %>%
+        group_by(book) %>%
+        top_n(10) %>%
+        ungroup() %>%
+        mutate(book = factor(book) %>% forcats::fct_rev()) %>%
+        ggplot(aes(drlib::reorder_within(bigram, n, book), n, fill = book)) +
+        geom_bar(stat = "identity", alpha = .8, show.legend = FALSE) +
+        drlib::scale_x_reordered() +
+        facet_wrap(~ book, ncol = 2, scales = "free") +
+        coord_flip()
+```
+
+#Sentiment Analysis
+
+```{r}
+series %>%
+        separate(bigram, c("word1", "word2"), sep = " ") %>%
+        filter(word1 == "not") %>%
+        count(book, word1, word2, sort = TRUE)
+
+```
+
+```{r}
+AFINN <- get_sentiments("afinn")
+
+(nots <- series %>%
+        separate(bigram, c("word1", "word2"), sep = " ") %>%
+        filter(word1 == "not") %>%
+        inner_join(AFINN, by = c(word2 = "word")) %>%
+        count(word2, score, sort = TRUE) 
+)
+```
+
+
+```{r}
+nots %>%
+        mutate(contribution = n * score) %>%
+        arrange(desc(abs(contribution))) %>%
+        head(20) %>%
+        ggplot(aes(reorder(word2, contribution), n * score, fill = n * score > 0)) +
+        geom_bar(stat = "identity", show.legend = FALSE) +
+        xlab("Words preceded by 'not'") +
+        ylab("Sentiment score * # of occurrances") +
+        coord_flip()
+```
+
+
+
+Visualizing N-gram netowrks, or what phrases are highly related.
+```{r}
+library(igraph)
+
+(bigram_graph <- series %>%
+        separate(bigram, c("word1", "word2"), sep = " ") %>%
+        filter(!word1 %in% stop_words$word,
+               !word2 %in% stop_words$word) %>%
+        count(word1, word2, sort = TRUE) %>%
+        unite("bigram", c(word1, word2), sep = " ") %>%
+        filter(n > 20) %>%
+        graph_from_data_frame()
+)
+
+```
+
+#Plot Results
+```{r}
+library(ggraph)
+set.seed(123)
+
+a <- grid::arrow(type = "closed", length = unit(.15, "inches"))
+
+ggraph(bigram_graph, layout = "fr") +
+        geom_edge_link() +
+        geom_node_point(color = "lightblue", size = 5) +
+        geom_node_text(aes(label = name), vjust = 1, hjust = 1) +
+        theme_void()
+```
+
+
+
+
+
+

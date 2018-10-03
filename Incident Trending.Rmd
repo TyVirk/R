@@ -1,0 +1,409 @@
+---
+title: "Incident Trending"
+author: "Tyler Virkler"
+date: "February 5, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message=F, warning=F}
+library(tm)
+library(SnowballC)
+library(ggplot2)
+library(wordcloud)
+library(RColorBrewer)
+library(cluster)
+library(ggdendro)
+library(lubridate)
+library(fpc) 
+```
+
+#Reading Incident Dataset
+```{r}
+Idata <- read.csv(file = "Incidents_FEB17toFEB18.csv", header=TRUE)
+
+```
+
+#Writing Incident Description Column to .txt file for analysis    
+```{r}
+write.table(Idata$Incident.Description,"IncidentDescription.txt",row.names=FALSE)
+
+#Separate Text Captured by Month
+Idata$month <- format(as.Date(Idata$Incident.Date, "%m/%d/%y"),"%m") #Create Month Column
+Idata$month<- as.numeric(Idata$month)
+Jan<-subset(Idata, month==01)
+Feb<-subset(Idata, month==02)
+Mar<-subset(Idata, month==03)
+Apr<-subset(Idata, month==04)
+May<-subset(Idata, month==05)
+Jun<-subset(Idata, month==06)
+Jul<-subset(Idata, month==07)
+Aug<-subset(Idata, month==08)
+Sep<-subset(Idata, month==09)
+Oct<-subset(Idata, month==10)
+Nov<-subset(Idata, month==11)
+Dec<-subset(Idata, month==12)
+#Write Text File to Combine all text for each month
+write.table(Jan$Incident.Description,"001_IncidentDescription.txt",row.names=FALSE)
+write.table(Feb$Incident.Description,"002_IncidentDescription.txt",row.names=FALSE)
+write.table(Mar$Incident.Description,"003_IncidentDescription.txt",row.names=FALSE)
+write.table(Apr$Incident.Description,"004_IncidentDescription.txt",row.names=FALSE)
+write.table(May$Incident.Description,"005_IncidentDescription.txt",row.names=FALSE)
+write.table(Jun$Incident.Description,"006_IncidentDescription.txt",row.names=FALSE)
+write.table(Jul$Incident.Description,"007_IncidentDescription.txt",row.names=FALSE)
+write.table(Aug$Incident.Description,"008_IncidentDescription.txt",row.names=FALSE)
+write.table(Sep$Incident.Description,"009_IncidentDescription.txt",row.names=FALSE)
+write.table(Oct$Incident.Description,"010_IncidentDescription.txt",row.names=FALSE)
+write.table(Nov$Incident.Description,"011_IncidentDescription.txt",row.names=FALSE)
+write.table(Dec$Incident.Description,"012_IncidentDescription.txt",row.names=FALSE)
+
+```
+
+#Loading File Location Folder Directory
+```{r}
+cname <- file.path("C:", "Users", "virklert", "Desktop", "IncidentTrending")
+dir(cname)
+
+```
+
+#Gathering info on files located in the specified folder above.
+```{r}
+docs <- VCorpus(DirSource(cname))
+summary(docs)
+```
+
+#Gathering Metadata on Txt file to analyze
+```{r}
+inspect(docs[1:12])
+```
+
+#Removing punctuation
+
+```{r}
+txt<-docs[1:12]
+txt <- tm_map(txt,removePunctuation)   
+```
+
+#Removing other special characters
+```{r}
+for (j in seq(txt)) {
+    txt[[j]] <- gsub("/", " ", txt[[j]])
+    txt[[j]] <- gsub("@", " ", txt[[j]])
+    txt[[j]] <- gsub(",", " ", txt[[j]])
+    txt[[j]] <- gsub("ðï.�", " ", txt[[j]])}
+```
+
+#Removing numbers
+
+```{r}
+txt <- tm_map(txt, removeNumbers)
+
+```
+
+
+#Convert all to lower case for continuity
+```{r}
+txt <- tm_map(txt, tolower)   
+txt <- tm_map(txt, PlainTextDocument)
+txtCopy <- txt
+```
+
+
+#Removing stopwords
+## Stop words are common words that don't add value
+
+```{r}
+txt <- tm_map(txt, removeWords, stopwords("english"))   
+txt <- tm_map(txt, PlainTextDocument)
+```
+
+
+#Check progress
+
+```{r}
+#writeLines(as.character(txt)) 
+
+```
+
+
+#Remove particular words if necessary
+
+```{r}
+txt <- tm_map(txt, removeWords, c("National Grid"))
+```
+
+#Combining words that form a phrase
+
+```{r}
+#for (j in seq(docs))
+#{
+#  txt[[j]] <- gsub("fake news", "fake_news", txt[[j]])
+#  txt[[j]] <- gsub("inner city", "inner-city", txt[[j]])
+#  txt[[j]] <- gsub("politically correct", "politically_correct", txt[[j]])
+#}
+#txt <- tm_map(txt, PlainTextDocument)
+```
+
+#Remove word endings to improve intrepretability
+
+```{r}
+# Note: I did not run this section of code for this particular example.
+#docs_st <- tm_map(txt, stemDocument)   
+#docs_st <- tm_map(docs_st, PlainTextDocument)
+#writeLines(as.character(docs_st[1])) # Check to see if it worked.
+# txt <- docs_st
+```
+
+#Remove unecessary whitespace
+
+```{r}
+txt <- tm_map(txt, stripWhitespace)
+
+```
+
+#Set type to text
+```{r}
+txt <- tm_map(txt, PlainTextDocument)
+```
+
+#Data Staging
+```{r}
+#x <- VectorSource(txt)
+#x <- VCorpus(txt)
+dtm <- DocumentTermMatrix(txt[c(1:12)]) 
+dtm 
+
+```
+
+#Explore Data
+
+```{r}
+freq <- colSums(as.matrix(dtm))   
+length(freq) 
+ord <- order(freq)  
+```
+
+#Export Matrix to Excel
+
+```{r}
+m <- as.matrix(dtm)   
+dim(m)
+write.csv(m, file="DocumentTermMatrix.csv")   
+```
+
+#Focusing on larger volume words
+
+```{r}
+#  Start by removing sparse terms:   
+dtms <- removeSparseTerms(dtm, 0.1) # This makes a matrix that is 20% empty space, maximum.   
+dtms
+```
+
+#
+```{r}
+freq <- colSums(as.matrix(dtm))
+```
+
+
+#First 20 frequencies
+
+```{r}
+head(table(freq), 20)
+```
+
+#Last 20 frequencies
+```{r}
+tail(table(freq), 20)
+```
+
+#Include Word
+```{r}
+freq <- colSums(as.matrix(dtms))   
+#freq  
+```
+
+```{r}
+freq <- sort(colSums(as.matrix(dtm)), decreasing=TRUE)   
+head(freq, 14)
+```
+
+```{r}
+findFreqTerms(dtm, lowfreq=500)   # Change "500" to whatever is most appropriate for your text data.
+
+```
+
+
+```{r}
+
+wf <- data.frame(word=names(freq), freq=freq)   
+top<-head(wf)  
+top
+
+p <- ggplot(subset(wf, freq>450), aes(x = reorder(word, -freq), y = freq)) +
+          geom_bar(stat = "identity") + 
+          theme(axis.text.x=element_text(angle=45, hjust=1))
+p  
+
+
+
+```
+
+# Finding Associations of top words
+## Works if you have more than one document to scan. Only one column in corpus.
+```{r}
+findAssocs(dtm, c("employee", "vehicle"), corlimit=0.99) # specifying a correlation limit of 0.99
+
+
+```
+
+#Word Cloud
+
+
+##Top Frequency Version
+```{r}
+set.seed(142)   
+wordcloud(names(freq), freq, max.words=100)
+```
+
+#Add Color
+```{r}
+set.seed(142)   
+wordcloud(names(freq), freq, min.freq=400, scale=c(5, .1), colors=brewer.pal(6, "Dark2"))  
+```
+
+#Clustering
+##This only compares sparcity across multiple documents.
+```{r}
+dtmss <- removeSparseTerms(dtm, 0.05) # This makes a matrix that is only 15% empty space, maximum.   
+dtmss
+```
+#Winter
+```{r}
+   
+d <- dist(t(dtmss), method="euclidian")   
+fit <- hclust(d=d, method="complete")   # for a different look try substituting: method="ward.D"/"complete"
+fit 
+
+
+```
+
+#Plot Cluster Results
+
+```{r}
+#par(mfrow=c(2, 1)) # Defines how many graphs to plot on one page Rows, Columns
+plot(fit, hang=-1, main="Full") # Shows Overall Dendogram, too large
+
+# Cut at height
+d <- cut(as.dendrogram(fit), h=3600)
+# Cut returns a list of sub-dendrograms
+d
+
+#Shows Details
+d$upper
+d$lower
+
+d$lower[[1]]
+d$lower[[2]]
+
+# Increases Margins
+#par(mar=c(5.1, 4.1, 4.1, 5.1)) 
+
+#Plots Dendogram for the specific cut
+plot(d$upper, main = "Above Cut") #Inital Break
+plot(d$lower[[2]], main = "Branch 2 Below Cut")
+
+```
+
+# Dig deeper into the dendogram
+```{r}
+#Cut branch 2
+d2 <- cut(as.dendrogram(fit), h=460)
+d2
+plot(d2$upper)
+plot(d2$lower[[1]], main="Branch 1.1")
+plot(d2$lower[[2]], main="Branch 1.2")
+plot(d2$lower[[3]], main="Branch 1.3") #Branch 3 shows company and vehicle are often accompanied by each other
+```
+# Focusing on Branch 2 for insight
+```{r}
+d3 <- cut(as.dendrogram(fit), h=200)
+d3 #Results show to focus on 1.1
+plot(d3$upper)
+plot(d3$lower[[1]], main="Branch 1.1.1")
+plot(d3$lower[[2]], main="Branch 1.1.2")
+plot(d3$lower[[3]], main="Branch 1.1.3")
+```
+
+```{r}
+d4 <- cut(as.dendrogram(fit), h=115)
+d4 #Results show to focus on 1.1
+plot(d4$upper)
+plot(d4$lower[[1]], main="Branch 1.1.1.1")
+plot(d4$lower[[2]], main="Branch 1.1.1.2")
+plot(d4$lower[[3]], main="Branch 1.1.1.3")
+```
+
+```{r}
+d5 <- cut(as.dendrogram(fit), h=70)
+d5 #Results show to focus on 1.1
+plot(d5$upper)
+plot(d5$lower[[1]], main="Branch 1.1.1.1.1")
+plot(d5$lower[[2]], main="Branch 1.1.1.1.2")
+plot(d5$lower[[3]], main="Branch 1.1.1.1.3")
+```
+
+```{r}
+d6 <- cut(as.dendrogram(fit), h=48)
+d6 #Results show to focus on 1.1
+plot(d6$upper)
+plot(d6$lower[[1]], main="Branch 1.1.1.1.1.1")
+plot(d6$lower[[2]], main="Branch 1.1.1.1.1.2")
+plot(d6$lower[[3]], main="Branch 1.1.1.1.1.3")
+```
+
+
+```{r}
+
+d7 <- cut(as.dendrogram(fit), h=27)
+d7 #Results show to focus on 1.1
+plot(d7$upper)
+plot(d7$lower[[4]], main="Branch 1.1.1.1.1.3.4")
+plot(d7$lower[[5]], main="Branch 1.1.1.1.1.3.5")
+plot(d7$lower[[6]], main="Branch 1.1.1.1.1.3.6")
+plot(d7$lower[[7]], main="Branch 1.1.1.1.1.3.7")
+plot(d7$lower[[8]], main="Branch 1.1.1.1.1.3.8")
+plot(d7$lower[[9]], main="Branch 1.1.1.1.1.3.9")
+plot(d7$lower[[10]], main="Branch 1.1.1.1.1.3.10")
+plot(d7$lower[[11]], main="Branch 1.1.1.1.1.3.11")
+plot(d7$lower[[12]], main="Branch 1.1.1.1.1.3.12")
+plot(d7$lower[[13]], main="Branch 1.1.1.1.1.3.13")
+plot(d7$lower[[14]], main="Branch 1.1.1.1.1.3.14")
+plot(d7$lower[[15]], main="Branch 1.1.1.1.1.3.15")
+plot(d7$lower[[16]], main="Branch 1.1.1.1.1.3.16")
+```
+
+
+
+
+```{r}
+library(ape)
+
+fit2 <- as.phylo(fit)
+plot(fit2, type="fan", cex=0.5)
+
+plot(fit2, type="fan", show.tip.label=FALSE, no.margin=TRUE)
+```
+
+
+
+```{r}
+d <- dist(t(dtmss), method="euclidian")   
+kfit <- kmeans(d, 12)   
+clusplot(as.matrix(d), kfit$cluster, color=T, shade=T, labels=4, lines=0) 
+```
+
+
+
